@@ -184,14 +184,6 @@ fun PerspectiveTransformationApp() {
             xOffset + newWidth, yOffset + newHeight, // Bottom-right
             xOffset, yOffset + newHeight         // Bottom-left
         )
-//        val exp = floatArrayOf(
-//            0f, 0f,
-//            newWidth, 0f,
-//            newWidth, newHeight,
-//            0f, newHeight
-//        )
-
-//        Log.d("X Offset and Y Offset", "$xOffset $yOffset", )
         Log.d("Exp Points", exp.joinToString(", "))
 
         val dstPoints = floatArrayOf(
@@ -203,24 +195,42 @@ fun PerspectiveTransformationApp() {
         Log.d("Dst Points", dstPoints.joinToString(", "))
 
         val matrix = Matrix()
-        matrix.setPolyToPoly(origPoints, 0, exp, 0, 4)
+        matrix.setPolyToPoly(origPoints, 0, dstPoints, 0, 4)
 
         val tempBitmap = Bitmap.createBitmap(bitmap.width, bitmap.height, Bitmap.Config.ARGB_8888)
         val canvas = android.graphics.Canvas(tempBitmap)
         canvas.drawBitmap(bitmap, matrix, Paint())
 
-        transformedBitmap = tempBitmap
+        val finalWidth: Int
+        val finalHeight: Int
+
+        if (bBoxAspectRatio > 1.0) {
+            finalWidth = bitmap.width
+            finalHeight = (bitmap.width / bBoxAspectRatio).roundToInt()
+        } else {
+            finalWidth = (bitmap.height * bBoxAspectRatio).roundToInt()
+            finalHeight = bitmap.height
+        }
+
+//        transformedBitmap = tempBitmap
+        transformedBitmap = Bitmap.createScaledBitmap(
+            tempBitmap,
+            finalWidth,
+            finalHeight,
+            true
+        )
     }
 
+
     Column(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize().padding(22.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
         Spacer(Modifier.height(26.dp))
         Box(
             modifier = Modifier
-                .padding(22.dp)
+//                .padding(22.dp)
 //                .fillMaxWidth()
 //                .aspectRatio(bitmap.width.toFloat() / bitmap.height)
                 .onGloballyPositioned { coordinates ->
@@ -307,6 +317,7 @@ fun PerspectiveTransformationApp() {
         Button(onClick = {handleClick()}) {
             Text("Apply Transformation")
         }
+        Spacer(Modifier.height(16.dp))
         if (transformedBitmap != null){
             Text("Transformed Image", style = MaterialTheme.typography.titleMedium)
             Image(
@@ -315,7 +326,6 @@ fun PerspectiveTransformationApp() {
                 modifier = Modifier
                     .fillMaxSize()
 //                    .aspectRatio(resultBoxAspectRatio.value?: 1f)
-                    .padding(16.dp)
             )
         }
     }
