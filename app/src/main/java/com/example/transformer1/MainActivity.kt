@@ -59,6 +59,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.example.transformer1.ui.theme.Transformer1Theme
 import kotlin.math.exp
+import kotlin.math.min
 import kotlin.math.roundToInt
 
 class MainActivity : ComponentActivity() {
@@ -100,12 +101,6 @@ fun PerspectiveTransformationApp() {
         200f, bitmap.height - 400f // Bottom-left corner shifted up
     )
 
-    val dstPoints = floatArrayOf(
-        0f, 0f,      // Top-left corner
-        imageWidth, 0f,     // Top-right corner
-        imageWidth, imageHeight,  // Bottom-right corner
-        0f, imageHeight     // Bottom-left corner
-    )
     Log.d("Bitmap Info", "Width: ${imageWidth}, Height: ${imageHeight}")
 
     var transformedBitmap by remember { mutableStateOf<Bitmap?>(null) }
@@ -141,24 +136,74 @@ fun PerspectiveTransformationApp() {
 //    pointOffsets[2].value = Offset(scaledPoints[4], scaledPoints[5])
 //    pointOffsets[3].value = Offset(scaledPoints[6], scaledPoints[7])
 
-    var origPoints = floatArrayOf()
 
-    pointOffsets.forEach{point ->
-        if (boxSize != null) {
-            val deScaleX = bitmap.width.toFloat() / boxSize!!.width
-            val deScaleY = bitmap.height.toFloat() / boxSize!!.height
-            origPoints += point.value.x * deScaleX
-            origPoints += point.value.y * deScaleY
-        }
-    }
 
     Log.d("Source Points", srcPoints.joinToString(", "))
     Log.d("Scaled Points", scaledPoints.toString())
-    Log.d("Original Points", origPoints.joinToString(", "))
 
+    val resultBoxAspectRatio = remember { mutableStateOf<Float?>(null) }
     val handleClick = {
+        var origPoints = floatArrayOf()
+
+        pointOffsets.forEach{point ->
+            if (boxSize != null) {
+                val deScaleX = bitmap.width.toFloat() / boxSize!!.width
+                val deScaleY = bitmap.height.toFloat() / boxSize!!.height
+
+                origPoints += point.value.x * deScaleX
+                origPoints += point.value.y * deScaleY
+            }
+        }
+        Log.d("Original Points", origPoints.joinToString(", "))
+
+        val xCoordinates = origPoints.filterIndexed { index, _ -> index % 2 == 0 }
+        val yCoordinates = origPoints.filterIndexed { index, _ -> index % 2 == 1 }
+
+        val minX = xCoordinates.minOrNull() ?: 0f
+        val maxX = xCoordinates.maxOrNull() ?: 0f
+        val minY = yCoordinates.minOrNull() ?: 0f
+        val maxY = yCoordinates.maxOrNull() ?: 0f
+
+        val bboxWidth = maxX - minX
+        val bboxHeight = maxY - minY
+        val bBoxAspectRatio = bboxWidth / bboxHeight
+        resultBoxAspectRatio.value = bBoxAspectRatio
+
+        val (newWidth, newHeight) = if (bBoxAspectRatio > 1.0) {
+            Pair(bitmap.width.toFloat(), bitmap.width.toFloat() / bBoxAspectRatio)
+        } else {
+            Pair(bitmap.height.toFloat() * bBoxAspectRatio, bitmap.height.toFloat())
+        }
+
+        val xOffset = (bitmap.width - newWidth) / 2
+        val yOffset = (bitmap.height - newHeight) / 2
+
+        val exp = floatArrayOf(
+            xOffset, yOffset,                    // Top-left
+            xOffset + newWidth, yOffset,         // Top-right
+            xOffset + newWidth, yOffset + newHeight, // Bottom-right
+            xOffset, yOffset + newHeight         // Bottom-left
+        )
+//        val exp = floatArrayOf(
+//            0f, 0f,
+//            newWidth, 0f,
+//            newWidth, newHeight,
+//            0f, newHeight
+//        )
+
+//        Log.d("X Offset and Y Offset", "$xOffset $yOffset", )
+        Log.d("Exp Points", exp.joinToString(", "))
+
+        val dstPoints = floatArrayOf(
+            0f, 0f,      // Top-left corner
+            imageWidth, 0f,     // Top-right corner
+            imageWidth, imageHeight,  // Bottom-right corner
+            0f, imageHeight   // Bottom-left corner
+        )
+        Log.d("Dst Points", dstPoints.joinToString(", "))
+
         val matrix = Matrix()
-        matrix.setPolyToPoly(origPoints, 0, dstPoints, 0, 4)
+        matrix.setPolyToPoly(origPoints, 0, exp, 0, 4)
 
         val tempBitmap = Bitmap.createBitmap(bitmap.width, bitmap.height, Bitmap.Config.ARGB_8888)
         val canvas = android.graphics.Canvas(tempBitmap)
@@ -269,6 +314,7 @@ fun PerspectiveTransformationApp() {
                 contentDescription = "Transformed Image",
                 modifier = Modifier
                     .fillMaxSize()
+//                    .aspectRatio(resultBoxAspectRatio.value?: 1f)
                     .padding(16.dp)
             )
         }
