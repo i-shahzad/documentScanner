@@ -225,116 +225,123 @@ fun PerspectiveTransformationApp(photoUri: Uri? = null) {
             finalHeight,
             true
         )
+
     }
 
     Column(
-        modifier = Modifier.fillMaxSize().padding(22.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(22.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Spacer(Modifier.height(26.dp))
-        Box(
-            modifier = Modifier
+        if (transformedBitmap == null){
+            Spacer(Modifier.height(26.dp))
+            Box(
+                modifier = Modifier
 //                .padding(22.dp)
 //                .fillMaxWidth()
 //                .aspectRatio(bitmap.width.toFloat() / bitmap.height)
-                .onGloballyPositioned { coordinates ->
-                    if (boxSize == null) {
-                        val size = coordinates.size
-                        boxSize = size
+                    .onGloballyPositioned { coordinates ->
+                        if (boxSize == null) {
+                            val size = coordinates.size
+                            boxSize = size
 
-                        pointOffsets[0].value = Offset(0f, 0f)
-                        pointOffsets[1].value = Offset(size.width.toFloat(), 0f)
-                        pointOffsets[2].value = Offset(size.width.toFloat(), size.height.toFloat())
-                        pointOffsets[3].value = Offset(0f, size.height.toFloat())
+                            pointOffsets[0].value = Offset(0f, 0f)
+                            pointOffsets[1].value = Offset(size.width.toFloat(), 0f)
+                            pointOffsets[2].value =
+                                Offset(size.width.toFloat(), size.height.toFloat())
+                            pointOffsets[3].value = Offset(0f, size.height.toFloat())
 
-                        Log.d(
-                            "Box Size globally",
-                            "Width: ${coordinates.size.width}, Height: ${coordinates.size.height}"
-                        )
+                            Log.d(
+                                "Box Size globally",
+                                "Width: ${coordinates.size.width}, Height: ${coordinates.size.height}"
+                            )
+                        }
                     }
-                }
 //                .border(2.dp, Color.White)
-        ) {
-            Image(
-                bitmap = bitmap.asImageBitmap(),
-                contentDescription = "Sample Image",
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(bitmap.width.toFloat() / bitmap.height),
-            )
-            boxSize?.let { size ->
-                Canvas(
+            ) {
+                Image(
+                    bitmap = bitmap.asImageBitmap(),
+                    contentDescription = "Sample Image",
                     modifier = Modifier
-//                        .fillMaxSize()
-                ) {
-                    for (i in 0 until pointOffsets.size) {
-                        val start = pointOffsets[i].value
-                        val end = pointOffsets[(i + 1) % pointOffsets.size].value
-                        drawLine(
-                            color = Color.Black,
-                            start = start,
-                            end = end,
-                            strokeWidth = 10f
-                        )
-                        drawLine(
-                            color = Color.White,
-                            start = start,
-                            end = end,
-                            strokeWidth = 5f
-                        )
-                    }
-                }
-                Log.d("Point Offset", pointOffsets.toString())
-                val toCenterPoints = (with(LocalDensity.current) { 20.dp.toPx()} / 2).toInt()
-                for (offset in pointOffsets) {
-                    Box(
+                        .fillMaxWidth()
+                        .aspectRatio(bitmap.width.toFloat() / bitmap.height),
+                )
+                boxSize?.let { size ->
+                    Canvas(
                         modifier = Modifier
-                            .offset {
-                                IntOffset(
-                                    x = offset.value.x.toInt() - toCenterPoints,
-                                    y = offset.value.y.toInt() - toCenterPoints
-                                )
-                            }
-                            .pointerInput(Unit) {
-                                detectDragGestures { change, dragAmount ->
-                                    change.consume()
-                                    offset.value = Offset(
-                                        (offset.value.x + dragAmount.x).coerceIn(
-                                            0f,
-                                            size.width.toFloat()
-                                        ),
-                                        (offset.value.y + dragAmount.y).coerceIn(
-                                            0f,
-                                            size.height.toFloat()
-                                        )
+//                        .fillMaxSize()
+                    ) {
+                        for (i in 0 until pointOffsets.size) {
+                            val start = pointOffsets[i].value
+                            val end = pointOffsets[(i + 1) % pointOffsets.size].value
+                            drawLine(
+                                color = Color.Black,
+                                start = start,
+                                end = end,
+                                strokeWidth = 10f
+                            )
+                            drawLine(
+                                color = Color.White,
+                                start = start,
+                                end = end,
+                                strokeWidth = 5f
+                            )
+                        }
+                    }
+                    Log.d("Point Offset", pointOffsets.toString())
+                    val toCenterPoints = (with(LocalDensity.current) { 20.dp.toPx() } / 2).toInt()
+                    for (offset in pointOffsets) {
+                        Box(
+                            modifier = Modifier
+                                .offset {
+                                    IntOffset(
+                                        x = offset.value.x.toInt() - toCenterPoints,
+                                        y = offset.value.y.toInt() - toCenterPoints
                                     )
                                 }
-                            }
-                            .size(20.dp)
-                            .background(Color.Magenta, shape = CircleShape)
-                    )
+                                .pointerInput(Unit) {
+                                    detectDragGestures { change, dragAmount ->
+                                        change.consume()
+                                        offset.value = Offset(
+                                            (offset.value.x + dragAmount.x).coerceIn(
+                                                0f,
+                                                size.width.toFloat()
+                                            ),
+                                            (offset.value.y + dragAmount.y).coerceIn(
+                                                0f,
+                                                size.height.toFloat()
+                                            )
+                                        )
+                                    }
+                                }
+                                .size(20.dp)
+                                .background(Color.Magenta, shape = CircleShape)
+                        )
+                    }
                 }
             }
-        }
 
-        Spacer(modifier = Modifier.height(16.dp))
-        Button(onClick = {handleClick()}) {
-            Text("Apply Transformation")
+            Spacer(modifier = Modifier.height(16.dp))
+            Button(onClick = { handleClick() }) {
+                Text("Apply Transformation")
+            }
+            Spacer(Modifier.height(16.dp))
         }
-        Spacer(Modifier.height(16.dp))
         if (transformedBitmap != null){
             Text("Transformed Image", style = MaterialTheme.typography.titleMedium)
             Image(
                 bitmap = transformedBitmap!!.asImageBitmap(),
                 contentDescription = "Transformed Image",
                 modifier = Modifier
-                    .fillMaxSize()
+                    .fillMaxWidth()
 //                    .aspectRatio(resultBoxAspectRatio.value?: 1f)
             )
         }
     }
 }
+
 
 
 @Composable
