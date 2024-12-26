@@ -1,339 +1,382 @@
 package com.example.transformer1
 
+import android.Manifest
+import android.app.Activity
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
-import android.graphics.Paint
+import android.media.ExifInterface
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
-import android.util.Log
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.collection.floatListOf
-import androidx.compose.foundation.Canvas
+import androidx.annotation.RequiresApi
+import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.example.transformer1.ui.theme.Transformer1Theme
-import kotlin.math.exp
-import kotlin.math.min
-import kotlin.math.roundToInt
+import androidx.compose.ui.viewinterop.AndroidView
+import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.isGranted
+import com.google.accompanist.permissions.rememberPermissionState
+import com.google.accompanist.permissions.shouldShowRationale
+import java.io.IOException
+import java.io.InputStream
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            PerspectiveTransformationApp()
+            Scaffold(
+                containerColor = Color.Black,
+                bottomBar = {
+                }
+            ) { padding ->
+                CameraApp(Modifier.padding(padding))
+            }
+
+        }
+    }
+}
+
+@RequiresApi(Build.VERSION_CODES.R)
+@Composable
+fun CameraScreen(
+    onPhotoCaptured: (Uri) -> Unit,
+    onError: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    CameraPermissionHandler {
+        val context = LocalContext.current
+        val lifecycleOwner = LocalLifecycleOwner.current
+        val cameraManager = remember { CameraManager(context) }
+
+        val previewView = remember { PreviewView(context).apply {
+            scaleType = PreviewView.ScaleType.FILL_CENTER
+        } }
+
+        LaunchedEffect(previewView) {
+            val cameraProvider = cameraManager.getCameraProvider()
+            cameraManager.startCamera(lifecycleOwner, cameraProvider, previewView)
+        }
+
+        Column(
+            modifier = modifier
+                .fillMaxSize()
+                .background(Color.Black),
+            verticalArrangement = Arrangement.Center
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .aspectRatio(4f / 3f)
+                    .background(Color.Black)
+            ) {
+                AndroidView(
+                    factory = { previewView },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                )
+            }
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+            ) {
+                Button(
+                    onClick = {
+                        cameraManager.takePhoto(
+                            context = context,
+                            onPhotoCaptured = onPhotoCaptured,
+                            onError = onError
+                        )
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                ) {
+                    Text("Take Photo")
+                }
+            }
+        }
+    }
+
+}
+
+@RequiresApi(Build.VERSION_CODES.R)
+@Composable
+fun CameraApp (modifier: Modifier = Modifier) {
+    var capturedImageUri by remember { mutableStateOf<Uri?>(null) }
+    val context = LocalContext.current
+
+    if (capturedImageUri == null) {
+        CameraScreen(
+            onPhotoCaptured = { uri ->
+                capturedImageUri = uri
+            },
+            onError = { error ->
+                // Handle error
+                println("Error capturing photo: $error")
+            },
+            modifier = modifier
+        )
+    } else {
+        CapturedImageScreen(
+            uri = capturedImageUri!!,
+            onRetakePicture = {
+                capturedImageUri = null
+            },
+            onAcceptPicture = { uri ->
+                val intent = Intent(context, ImageTransformer::class.java)
+                intent.putExtra("imageUri", uri.toString())
+                context.startActivity(intent)
+                println("Picture accepted: $uri")
+            },
+            modifier = modifier
+        )
+    }
+}
+
+
+@Composable
+fun CapturedImageScreen(
+    uri: Uri,
+    onRetakePicture: () -> Unit,
+    onAcceptPicture: (Uri) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val bitmap = loadAndRotateBitmap(uri)
+
+    Column(
+        modifier = modifier.fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+        ) {
+            bitmap?.let { imageBitmap ->
+                Image(
+                    bitmap = imageBitmap,
+                    contentDescription = "Captured photo",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Fit
+                )
+            }
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly
+        ) {
+            Button(
+                onClick = {
+                    // Delete img file
+                    try {
+                        context.contentResolver.delete(uri, null, null)
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                    onRetakePicture()
+                },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.error
+                )
+            ) {
+                Text("Retake")
+            }
+
+            Button(
+                onClick = { onAcceptPicture(uri) }
+            ) {
+                Text("Accept")
+            }
         }
     }
 }
 
 @Composable
-fun PerspectiveTransformationApp() {
+fun loadAndRotateBitmap(uri: Uri): ImageBitmap? {
     val context = LocalContext.current
 
-    val bitmap = BitmapFactory.decodeResource(context.resources, R.drawable.city_street)
-    val bitmapWidthDp = with(LocalDensity.current) { bitmap.width.toDp() }
-    val bitmapHeightDp = with(LocalDensity.current) { bitmap.height.toDp() }
-    Log.d("Bitmap Info in DP", "Width: ${bitmapWidthDp}, Height: ${bitmapHeightDp}")
+    return remember(uri) {
+        context.contentResolver.openInputStream(uri)?.use { inputStream ->
+            // First, decode the image
+            val originalBitmap = BitmapFactory.decodeStream(inputStream)
 
-    val aspectRatio = bitmap.width.toFloat() / bitmap.height.toFloat()
+            // Get rotation from EXIF data
+            val rotation = try {
+                context.contentResolver.openInputStream(uri)?.use { exifStream ->
+                    val exif = ExifInterface(exifStream)
+                    when (exif.getAttributeInt(
+                        ExifInterface.TAG_ORIENTATION,
+                        ExifInterface.ORIENTATION_NORMAL
+                    )) {
+                        ExifInterface.ORIENTATION_ROTATE_90 -> 90
+                        ExifInterface.ORIENTATION_ROTATE_180 -> 180
+                        ExifInterface.ORIENTATION_ROTATE_270 -> 270
+                        else -> 0
+                    }
+                } ?: 0
+            } catch (e: IOException) {
+                e.printStackTrace()
+                0
+            }
 
-    val boxWidthDp = with(LocalDensity.current) { (bitmap.width * 0.5f).toDp() }
-    val boxWidthPx = with(LocalDensity.current) { boxWidthDp.toPx() }
+            // If rotation is needed, rotate the bitmap
+            val transformedBitmap = if (rotation != 0) {
+                val matrix = Matrix().apply {
+                    postRotate(rotation.toFloat())
+                }
+                Bitmap.createBitmap(
+                    originalBitmap,
+                    0,
+                    0,
+                    originalBitmap.width,
+                    originalBitmap.height,
+                    matrix,
+                    true
+                )
+            } else {
+                originalBitmap
+            }
 
-    val boxHeightPx = boxWidthPx / aspectRatio
-    val boxHeightDp = with(LocalDensity.current) { boxHeightPx.toDp() }
+            transformedBitmap.asImageBitmap()
+        }
+    }
+}
 
-    val imageWidth = bitmap.width.toFloat()
-    val imageHeight = bitmap.height.toFloat()
 
-    Log.d("Box Dimensions Info: ", "$boxWidthPx $boxHeightPx")
-
-    val srcPoints = floatArrayOf(
-        400f, 200f, // Top-left corner shifted inward
-        bitmap.width - 200f, 400f, // Top-right corner shifted down
-        bitmap.width - 400f, bitmap.height - 200f, // Bottom-right corner shifted inward
-        200f, bitmap.height - 400f // Bottom-left corner shifted up
+@OptIn(ExperimentalPermissionsApi::class)
+@Composable
+fun CameraPermissionHandler(
+    onPermissionGranted: @Composable () -> Unit
+) {
+    val cameraPermissonState = rememberPermissionState(
+        permission = Manifest.permission.CAMERA
     )
 
-    Log.d("Bitmap Info", "Width: ${imageWidth}, Height: ${imageHeight}")
-
-    var transformedBitmap by remember { mutableStateOf<Bitmap?>(null) }
-
-    var boxSize by remember { mutableStateOf<IntSize?>(null) }
-
-    val scaledPoints = if( boxSize != null ) {
-        val scaleX = (boxSize?.width?.toFloat() ?: 1f) / bitmap.width
-        val scaleY = (boxSize?.height?.toFloat() ?: 1f) / bitmap.height
-
-        srcPoints.mapIndexed { index, value ->
-            if (index % 2 == 0) {
-                value * scaleX
-            } else {
-                value * scaleY
-            }
+    LaunchedEffect(Unit) {
+        if (!cameraPermissonState.status.isGranted) {
+            cameraPermissonState.launchPermissionRequest()
         }
-    }else {
-        srcPoints.toList()
     }
 
-    val pointOffsets = remember {
-        mutableStateListOf(
-                mutableStateOf(Offset(0f, 0f)),
-                mutableStateOf(Offset(50f, 50f)),
-                mutableStateOf(Offset(100f, 100f)),
-                mutableStateOf(Offset(150f, 150f))
-        )
+    when {
+        cameraPermissonState.status.isGranted -> {
+            onPermissionGranted()
+        }
+        cameraPermissonState.status.shouldShowRationale -> {
+            PermissionDialog(
+                onRequestPermission = { cameraPermissonState.launchPermissionRequest() }
+            )
+        }
+        else -> {
+            PermissionDeniedContent()
+        }
     }
+}
 
-//    pointOffsets[0].value = Offset(scaledPoints[0], scaledPoints[1])
-//    pointOffsets[1].value = Offset(scaledPoints[2], scaledPoints[3])
-//    pointOffsets[2].value = Offset(scaledPoints[4], scaledPoints[5])
-//    pointOffsets[3].value = Offset(scaledPoints[6], scaledPoints[7])
-
-
-
-    Log.d("Source Points", srcPoints.joinToString(", "))
-    Log.d("Scaled Points", scaledPoints.toString())
-
-    val resultBoxAspectRatio = remember { mutableStateOf<Float?>(null) }
-    val handleClick = {
-        var origPoints = floatArrayOf()
-
-        pointOffsets.forEach{point ->
-            if (boxSize != null) {
-                val deScaleX = bitmap.width.toFloat() / boxSize!!.width
-                val deScaleY = bitmap.height.toFloat() / boxSize!!.height
-
-                origPoints += point.value.x * deScaleX
-                origPoints += point.value.y * deScaleY
-            }
-        }
-        Log.d("Original Points", origPoints.joinToString(", "))
-
-        val xCoordinates = origPoints.filterIndexed { index, _ -> index % 2 == 0 }
-        val yCoordinates = origPoints.filterIndexed { index, _ -> index % 2 == 1 }
-
-        val minX = xCoordinates.minOrNull() ?: 0f
-        val maxX = xCoordinates.maxOrNull() ?: 0f
-        val minY = yCoordinates.minOrNull() ?: 0f
-        val maxY = yCoordinates.maxOrNull() ?: 0f
-
-        val bboxWidth = maxX - minX
-        val bboxHeight = maxY - minY
-        val bBoxAspectRatio = bboxWidth / bboxHeight
-        resultBoxAspectRatio.value = bBoxAspectRatio
-
-        val (newWidth, newHeight) = if (bBoxAspectRatio > 1.0) {
-            Pair(bitmap.width.toFloat(), bitmap.width.toFloat() / bBoxAspectRatio)
-        } else {
-            Pair(bitmap.height.toFloat() * bBoxAspectRatio, bitmap.height.toFloat())
-        }
-
-        val xOffset = (bitmap.width - newWidth) / 2
-        val yOffset = (bitmap.height - newHeight) / 2
-
-        val exp = floatArrayOf(
-            xOffset, yOffset,                    // Top-left
-            xOffset + newWidth, yOffset,         // Top-right
-            xOffset + newWidth, yOffset + newHeight, // Bottom-right
-            xOffset, yOffset + newHeight         // Bottom-left
-        )
-        Log.d("Exp Points", exp.joinToString(", "))
-
-        val dstPoints = floatArrayOf(
-            0f, 0f,      // Top-left corner
-            imageWidth, 0f,     // Top-right corner
-            imageWidth, imageHeight,  // Bottom-right corner
-            0f, imageHeight   // Bottom-left corner
-        )
-        Log.d("Dst Points", dstPoints.joinToString(", "))
-
-        val matrix = Matrix()
-        matrix.setPolyToPoly(origPoints, 0, dstPoints, 0, 4)
-
-        val tempBitmap = Bitmap.createBitmap(bitmap.width, bitmap.height, Bitmap.Config.ARGB_8888)
-        val canvas = android.graphics.Canvas(tempBitmap)
-        canvas.drawBitmap(bitmap, matrix, Paint())
-
-        val finalWidth: Int
-        val finalHeight: Int
-
-        if (bBoxAspectRatio > 1.0) {
-            finalWidth = bitmap.width
-            finalHeight = (bitmap.width / bBoxAspectRatio).roundToInt()
-        } else {
-            finalWidth = (bitmap.height * bBoxAspectRatio).roundToInt()
-            finalHeight = bitmap.height
-        }
-
-//        transformedBitmap = tempBitmap
-        transformedBitmap = Bitmap.createScaledBitmap(
-            tempBitmap,
-            finalWidth,
-            finalHeight,
-            true
-        )
-    }
-
+@Composable
+fun PermissionDeniedContent() {
+    val context = LocalContext.current
 
     Column(
-        modifier = Modifier.fillMaxSize().padding(22.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Spacer(Modifier.height(26.dp))
-        Box(
-            modifier = Modifier
-//                .padding(22.dp)
-//                .fillMaxWidth()
-//                .aspectRatio(bitmap.width.toFloat() / bitmap.height)
-                .onGloballyPositioned { coordinates ->
-                    if (boxSize == null) {
-                        val size = coordinates.size
-                        boxSize = size
+        Text(
+            text = "Camera permission is required for this feature to work. " +
+                    "Please grant the permission in app settings.",
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(bottom = 16.dp)
+        )
 
-                        pointOffsets[0].value = Offset(0f, 0f)
-                        pointOffsets[1].value = Offset(size.width.toFloat(), 0f)
-                        pointOffsets[2].value = Offset(size.width.toFloat(), size.height.toFloat())
-                        pointOffsets[3].value = Offset(0f, size.height.toFloat())
-
-                        Log.d(
-                            "Box Size globally",
-                            "Width: ${coordinates.size.width}, Height: ${coordinates.size.height}"
-                        )
-                    }
+        Button(
+            onClick = {
+                // Open app settings
+                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = Uri.fromParts("package", context.packageName, null)
+                    context.startActivity(this)
                 }
-//                .border(2.dp, Color.White)
+            },
+            modifier = Modifier.padding(top = 8.dp)
         ) {
-            Image(
-                bitmap = bitmap.asImageBitmap(),
-                contentDescription = "Sample Image",
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(bitmap.width.toFloat() / bitmap.height),
-            )
-            boxSize?.let { size ->
-                Canvas(
-                    modifier = Modifier
-//                        .fillMaxSize()
-                ) {
-                    for (i in 0 until pointOffsets.size) {
-                        val start = pointOffsets[i].value
-                        val end = pointOffsets[(i + 1) % pointOffsets.size].value
-                        drawLine(
-                            color = Color.Black,
-                            start = start,
-                            end = end,
-                            strokeWidth = 10f
-                        )
-                        drawLine(
-                            color = Color.White,
-                            start = start,
-                            end = end,
-                            strokeWidth = 5f
-                        )
-                    }
-                }
-                Log.d("Point Offset", pointOffsets.toString())
-                val toCenterPoints = (with(LocalDensity.current) { 20.dp.toPx()} / 2).toInt()
-                for (offset in pointOffsets) {
-                    Box(
-                        modifier = Modifier
-                            .offset {
-                                IntOffset(
-                                    x = offset.value.x.toInt() - toCenterPoints,
-                                    y = offset.value.y.toInt() - toCenterPoints
-                                )
-                            }
-                            .pointerInput(Unit) {
-                                detectDragGestures { change, dragAmount ->
-                                    change.consume()
-                                    offset.value = Offset(
-                                        (offset.value.x + dragAmount.x).coerceIn(
-                                            0f,
-                                            size.width.toFloat()
-                                        ),
-                                        (offset.value.y + dragAmount.y).coerceIn(
-                                            0f,
-                                            size.height.toFloat()
-                                        )
-                                    )
-                                }
-                            }
-                            .size(20.dp)
-                            .background(Color.Magenta, shape = CircleShape)
-                    )
-                }
-            }
+            Text("Open Settings")
         }
+    }
+}
 
-        Spacer(modifier = Modifier.height(16.dp))
-        Button(onClick = {handleClick()}) {
-            Text("Apply Transformation")
-        }
-        Spacer(Modifier.height(16.dp))
-        if (transformedBitmap != null){
-            Text("Transformed Image", style = MaterialTheme.typography.titleMedium)
-            Image(
-                bitmap = transformedBitmap!!.asImageBitmap(),
-                contentDescription = "Transformed Image",
-                modifier = Modifier
-                    .fillMaxSize()
-//                    .aspectRatio(resultBoxAspectRatio.value?: 1f)
-            )
+@Composable
+fun PermissionDialog(
+    onRequestPermission: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Text(
+            text = "Camera permission is required to take photos.",
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(bottom = 16.dp)
+        )
+        Button(
+            onClick = onRequestPermission,
+            modifier = Modifier.padding(top = 8.dp)
+        ) {
+            Text("Request permission")
         }
     }
 }
 
 
-@Composable
-@Preview
-fun PerspectiveTransformationAppPreview() {
-    PerspectiveTransformationApp()
-}
