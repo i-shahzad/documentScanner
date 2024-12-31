@@ -26,6 +26,7 @@
             </intent-filter>
         </activity>
         <activity android:name=".ImageTransformer"/>
+        <activity android:name=".ImageFiltersActivity"/>
         <activity android:name=".ExampleActivity"/>
     </application>
 
